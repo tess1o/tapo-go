@@ -1,18 +1,17 @@
-package main
+package tapo
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/tess1o/tapo-go"
 	"strconv"
 )
 
 type TSeries struct {
-	hub *tapo.Hub
+	hub *Hub
 }
 
-func NewTSeriesDevices(hub *tapo.Hub) *TSeries {
+func NewTSeriesDevices(hub *Hub) *TSeries {
 	return &TSeries{hub}
 }
 

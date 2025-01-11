@@ -40,7 +40,7 @@ func tDevicesExample() {
 	if err != nil {
 		log.Fatalf("Error creating hub: %s", err)
 	}
-	t := NewTSeriesDevices(hub)
+	t := tapo.NewTSeriesDevices(hub)
 	seriesDevices, err := t.GetTSeriesDevices()
 	if err != nil {
 		log.Fatalf("Error getting TSeries devices: %s", err)
