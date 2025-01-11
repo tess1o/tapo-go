@@ -8,6 +8,7 @@ import (
 func main() {
 	smartPlugExample()
 	hubExample()
+	tDevicesExample()
 }
 
 func smartPlugExample() {
@@ -31,9 +32,18 @@ func hubExample() {
 	if err != nil {
 		log.Fatalf("Error getting child devices: %s", err)
 	}
-	devicesJsonResponse, err := devices.MarshalJSON()
+	log.Printf("Devices: %+v\n", devices)
+}
+
+func tDevicesExample() {
+	hub, err := tapo.NewHub("192.168.1.15", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
 	if err != nil {
-		log.Fatalf("Error marshalling devices: %s", err)
+		log.Fatalf("Error creating hub: %s", err)
 	}
-	log.Printf("Devices: %+v\n", string(devicesJsonResponse))
+	t := NewTSeriesDevices(hub)
+	seriesDevices, err := t.GetTSeriesDevices()
+	if err != nil {
+		log.Fatalf("Error getting TSeries devices: %s", err)
+	}
+	log.Printf("T Series devices: %+v\n", seriesDevices)
 }
