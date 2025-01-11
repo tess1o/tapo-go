@@ -7,7 +7,7 @@ type SmartPlug struct {
 }
 
 func NewSmartPlug(host, email, password string, options Options) (*SmartPlug, error) {
-	tr, err := NewKlapTransport(email, password, host, nil)
+	tr, err := NewKlapTransport(email, password, host, options)
 	if err != nil {
 		return nil, err
 	}

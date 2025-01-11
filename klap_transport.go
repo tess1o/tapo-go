@@ -16,17 +16,18 @@ import (
 )
 
 type KlapTransport struct {
-	Username   string
-	Password   string
-	Host       string
-	httpClient *http.Client
+	Username    string
+	Password    string
+	Host        string
+	httpClient  *http.Client
+	retryConfig *RetryConfig
 
 	Cookies []*http.Cookie
 	Session *KlapEncryptionSession
 }
 
-func NewKlapTransport(username, password, host string, httpClient *http.Client) (*KlapTransport, error) {
-	var client = httpClient
+func NewKlapTransport(username, password, host string, options Options) (*KlapTransport, error) {
+	var client = options.HttpClient
 	if client == nil {
 		client = DefaultHttpClient
 	}
@@ -184,10 +185,18 @@ func (k *KlapTransport) ExecuteRequest(request *RequestSpec) (response json.RawM
 	var statusCode int
 	var responseErr error
 
-	responseBody, statusCode, responseErr = k.executeNoRetry(request)
+	for retries := 0; ; retries++ {
+		responseBody, statusCode, responseErr = k.executeHttpRequest(request)
 
-	if responseErr != nil || statusCode != 200 {
-		return response, errors.New(fmt.Sprintf("request exited with failed status: %d, error: %+v", statusCode, responseErr))
+		if responseErr == nil && statusCode == 200 {
+			break
+		}
+
+		if (k.retryConfig == nil || retries >= k.retryConfig.RetryCount) || k.retryConfig.Retry403ErrorsOnly && statusCode != 403 {
+			return response, errors.New(fmt.Sprintf("request exited with failed status: %d, error: %+v", statusCode, responseErr))
+		}
+
+		time.Sleep(k.retryConfig.RetryDelay * time.Second)
 	}
 
 	// Decrypt the payload to process it
@@ -195,7 +204,7 @@ func (k *KlapTransport) ExecuteRequest(request *RequestSpec) (response json.RawM
 	return json.RawMessage(httpResponseBodyString), nil
 }
 
-func (k *KlapTransport) executeNoRetry(request *RequestSpec) ([]byte, int, error) {
+func (k *KlapTransport) executeHttpRequest(request *RequestSpec) ([]byte, int, error) {
 	httpRequest, err := k.prepareRequest(request)
 	if err != nil {
 		return nil, -1, err
