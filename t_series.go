@@ -1,6 +1,7 @@
 package tapo
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -14,8 +15,8 @@ func NewTSeriesDevices(hub *Hub) *TSeries {
 	return &TSeries{hub}
 }
 
-func (t *TSeries) GetTSeriesDevices() ([]TSeriesResponse, error) {
-	devices, err := t.hub.GetChildDevices()
+func (t *TSeries) GetTSeriesDevices(ctx context.Context) ([]TSeriesResponse, error) {
+	devices, err := t.hub.GetChildDevices(ctx)
 	if err != nil {
 		return nil, err
 	}

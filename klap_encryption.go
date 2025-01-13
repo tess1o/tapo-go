@@ -79,11 +79,11 @@ func (s *KlapEncryptionSession) encrypt(msg string) ([]byte, int32) {
 	return append(signature, ciphertext...), s.seq
 }
 
-func (s *KlapEncryptionSession) decrypt(msg []byte) string {
+func (s *KlapEncryptionSession) decrypt(msg []byte) []byte {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		log.Println("Error creating AES cipher:", err)
-		return ""
+		return []byte("")
 	}
 
 	cbc := cipher.NewCBCDecrypter(block, s.ivSeq())
@@ -93,10 +93,10 @@ func (s *KlapEncryptionSession) decrypt(msg []byte) string {
 	unpaddedData, err := pkcs7Unpad(plaintext, aes.BlockSize)
 	if err != nil {
 		log.Println("Error unpadding PKCS7:", err)
-		return ""
+		return []byte("")
 	}
 
-	return string(unpaddedData)
+	return unpaddedData
 }
 
 func seqToBytes(seq int32) []byte {

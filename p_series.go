@@ -1,13 +1,16 @@
 package tapo
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 type SmartPlug struct {
 	*Device
 }
 
-func NewSmartPlug(host, email, password string, options Options) (*SmartPlug, error) {
-	tr, err := NewKlapTransport(email, password, host, options)
+func NewSmartPlug(ctx context.Context, host, email, password string, options Options) (*SmartPlug, error) {
+	tr, err := NewKlapTransport(ctx, email, password, host, options)
 	if err != nil {
 		return nil, err
 	}
@@ -15,40 +18,40 @@ func NewSmartPlug(host, email, password string, options Options) (*SmartPlug, er
 	return &SmartPlug{tapo}, nil
 }
 
-func (t *SmartPlug) TurnOn() (*SetDeviceParameterResponse, error) {
+func (t *SmartPlug) TurnOn(ctx context.Context) (*SetDeviceParameterResponse, error) {
 	var response *SetDeviceParameterResponse
 	params := json.RawMessage("{\"device_on\":true}")
-	err := t.ExecuteMethod("set_device_info", params, &response)
+	err := t.ExecuteMethod(ctx, "set_device_info", params, &response)
 	return response, err
 }
 
-func (t *SmartPlug) TurnOff() (*SetDeviceParameterResponse, error) {
+func (t *SmartPlug) TurnOff(ctx context.Context) (*SetDeviceParameterResponse, error) {
 	var response *SetDeviceParameterResponse
 	params := json.RawMessage("{\"device_on\":false}")
-	err := t.ExecuteMethod("set_device_info", params, &response)
+	err := t.ExecuteMethod(ctx, "set_device_info", params, &response)
 	return response, err
 }
 
-func (t *SmartPlug) GetEnergyUsage() (*EnergyUsageResponse, error) {
+func (t *SmartPlug) GetEnergyUsage(ctx context.Context) (*EnergyUsageResponse, error) {
 	var response *EnergyUsageResponse
-	err := t.ExecuteMethod("get_energy_usage", nil, &response)
+	err := t.ExecuteMethod(ctx, "get_energy_usage", nil, &response)
 	return response, err
 }
 
-func (t *SmartPlug) GetCurrentPower() (*CurrentPower, error) {
+func (t *SmartPlug) GetCurrentPower(ctx context.Context) (*CurrentPower, error) {
 	var response *CurrentPower
-	err := t.ExecuteMethod("get_current_power", nil, &response)
+	err := t.ExecuteMethod(ctx, "get_current_power", nil, &response)
 	return response, err
 }
 
-func (t *SmartPlug) GetEmeterData() (*EmeterData, error) {
+func (t *SmartPlug) GetEmeterData(ctx context.Context) (*EmeterData, error) {
 	var response *EmeterData
-	err := t.ExecuteMethod("get_emeter_data", nil, &response)
+	err := t.ExecuteMethod(ctx, "get_emeter_data", nil, &response)
 	return response, err
 }
 
-func (t *SmartPlug) DeviceInfo() (*DeviceInfoResponse, error) {
+func (t *SmartPlug) DeviceInfo(ctx context.Context) (*DeviceInfoResponse, error) {
 	var response *DeviceInfoResponse
-	err := t.ExecuteMethod("get_device_info", nil, &response)
+	err := t.ExecuteMethod(ctx, "get_device_info", nil, &response)
 	return response, err
 }

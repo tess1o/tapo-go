@@ -10,38 +10,76 @@ API is not stable, can be changed before release 1.0.0 is released.
 Smart Plugs (P110, P115)
 
 ```go
-p115, err := tapo.NewSmartPlug("192.169.1.10", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
-if err != nil {
-    log.Fatalf("Error creating smart plug: %s", err)
+package main
+
+import (
+	"context"
+	"github.com/tess1o/tapo-go"
+	"log"
+	"time"
+)
+
+func main() {
+	ctx := context.Background()
+	p115, err := tapo.NewSmartPlug(ctx, "192.168.1.10", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{
+		RetryConfig: tapo.DefaultRetryConfig,
+	})
+	if err != nil {
+		log.Printf("Error creating smart plug: %s", err)
+		return
+	}
+	energyUsage, err := p115.GetEnergyUsage(ctx)
+	if err != nil {
+		log.Printf("Error getting energy usage: %s", err)
+		return
+	}
+	log.Printf("Energy usage: %+v\n", energyUsage.Result)
 }
-energyUsage, err := p115.GetEnergyUsage()
-if err != nil {
-    log.Fatalf("Error getting energy usage: %s", err)
-}
-log.Printf("Energy usage: %+v\n", energyUsage.Result)
+
 ```
 
 Hub (H200) and its devices:
 
 ```go
-	hub, err := tapo.NewHub("192.168.1.15", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
-if err != nil {
-log.Fatalf("Error creating hub: %s", err)
+package main
+
+import (
+	"context"
+	"github.com/tess1o/tapo-go"
+	"log"
+	"time"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	hub, err := tapo.NewHub(ctx, "192.168.1.2", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
+	if err != nil {
+		log.Printf("Error creating hub: %s", err)
+		return
+	}
+
+	hubInfo, err := hub.GetDeviceInfo(ctx)
+	if err != nil {
+		log.Printf("Error getting hub device info: %s", err)
+	} else {
+		log.Printf("Device info: %+v\n", hubInfo)
+	}
+	
+	t := tapo.NewTSeriesDevices(hub)
+	seriesDevices, err := t.GetTSeriesDevices(ctx)
+	if err != nil {
+		log.Printf("Error getting TSeries devices: %s", err)
+		return
+	}
+	log.Printf("T Series devices: %+v\n", seriesDevices)
 }
-t := tapo.NewTSeriesDevices(hub)
-seriesDevices, err := t.GetTSeriesDevices()
-if err != nil {
-log.Fatalf("Error getting TSeries devices: %s", err)
-}
-log.Printf("T Series devices: %+v\n", seriesDevices)
+
 ```
 
 ## Todo
 
 - Add more methods to P11X and H200 devices
-- Add structs to reflect the API responses, instead of json.RawMessage
-- Add more error handling for AES transport (used in H200)
-- Add ctx support
 
 ## Credits
 

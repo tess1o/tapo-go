@@ -57,19 +57,19 @@ func (a *AES) Encrypt(data []byte) (string, error) {
 }
 
 // Decrypt decrypts the base64-encoded input data using AES CBC with PKCS7 unpadding.
-func (a *AES) Decrypt(data string) (string, error) {
+func (a *AES) Decrypt(data string) ([]byte, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
-		return "", err
+		return []byte(""), err
 	}
 
 	block, err := aes.NewCipher(a.key)
 	if err != nil {
-		return "", err
+		return []byte(""), err
 	}
 
 	if len(ciphertext)%aes.BlockSize != 0 {
-		return "", errors.New("ciphertext is not a multiple of the block size")
+		return []byte(""), errors.New("ciphertext is not a multiple of the block size")
 	}
 
 	plaintext := make([]byte, len(ciphertext))
@@ -79,10 +79,10 @@ func (a *AES) Decrypt(data string) (string, error) {
 	// Remove PKCS7 padding
 	plaintext, err = pkcs7Unpad(plaintext, aes.BlockSize)
 	if err != nil {
-		return "", err
+		return []byte(""), err
 	}
 
-	return string(plaintext), nil
+	return plaintext, nil
 }
 
 // pkcs7Pad adds PKCS7 padding to the data.

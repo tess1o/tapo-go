@@ -2,6 +2,7 @@ package tapo
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -26,7 +27,7 @@ type KlapTransport struct {
 	Session *KlapEncryptionSession
 }
 
-func NewKlapTransport(username, password, host string, options Options) (*KlapTransport, error) {
+func NewKlapTransport(ctx context.Context, username, password, host string, options Options) (*KlapTransport, error) {
 	var client = options.HttpClient
 	if client == nil {
 		client = DefaultHttpClient
@@ -37,12 +38,13 @@ func NewKlapTransport(username, password, host string, options Options) (*KlapTr
 	}
 
 	tr := &KlapTransport{
-		Username:   username,
-		Password:   password,
-		Host:       host,
-		httpClient: client,
+		Username:    username,
+		Password:    password,
+		Host:        host,
+		httpClient:  client,
+		retryConfig: options.RetryConfig,
 	}
-	err := tr.handshake()
+	err := tr.handshake(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +83,7 @@ func (k *KlapTransport) generateSeedAuthHash(localSeed []byte, remoteSeed []byte
 	return finalHashBytes[:]
 }
 
-func (k *KlapTransport) handshake1() ([]byte, []byte, error) {
+func (k *KlapTransport) handshake1(ctx context.Context) ([]byte, []byte, error) {
 	localSeed := make([]byte, 16)
 	_, err := rand.Read(localSeed)
 	if err != nil {
@@ -94,7 +96,7 @@ func (k *KlapTransport) handshake1() ([]byte, []byte, error) {
 	}
 
 	bodyBytesReader := bytes.NewBuffer(localSeed)
-	request, err := http.NewRequest(http.MethodPost, u.String(), bodyBytesReader)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bodyBytesReader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating HTTP request: %s", err)
 	}
@@ -124,7 +126,7 @@ func (k *KlapTransport) handshake1() ([]byte, []byte, error) {
 	return localSeed, remoteSeed, nil
 }
 
-func (k *KlapTransport) handshake2(localSeed, remoteSeed []byte) error {
+func (k *KlapTransport) handshake2(ctx context.Context, localSeed, remoteSeed []byte) error {
 	authHash := k.generateAuthHashV2()
 	remoteSeedAuthHash := k.generateSeedAuthHash(localSeed, remoteSeed, authHash, 2)
 
@@ -133,7 +135,7 @@ func (k *KlapTransport) handshake2(localSeed, remoteSeed []byte) error {
 	if err != nil {
 		return err
 	}
-	request, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewBuffer(remoteSeedAuthHash))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewBuffer(remoteSeedAuthHash))
 	if err != nil {
 		return fmt.Errorf("error creating HTTP request: %s", err)
 	}
@@ -147,8 +149,9 @@ func (k *KlapTransport) handshake2(localSeed, remoteSeed []byte) error {
 	}
 
 	defer response.Body.Close()
+	httpResponseBody, err := io.ReadAll(response.Body)
 	if response.StatusCode != 200 {
-		return fmt.Errorf("handshake 2 failed with status code: %d", response.StatusCode)
+		return fmt.Errorf("handshake 2 failed with status code: %d, response: %s", response.StatusCode, httpResponseBody)
 	}
 
 	k.Session = NewKlapEncryptionSession(
@@ -159,10 +162,10 @@ func (k *KlapTransport) handshake2(localSeed, remoteSeed []byte) error {
 	return nil
 }
 
-func (k *KlapTransport) handshake() error {
+func (k *KlapTransport) handshake(ctx context.Context) error {
 	// Perform first stage of handshake phase
 	// The mission here is to get a remote seed and cookies
-	localSeed, remoteSeed, err := k.handshake1()
+	localSeed, remoteSeed, err := k.handshake1(ctx)
 	if err != nil {
 		return err
 	}
@@ -171,7 +174,7 @@ func (k *KlapTransport) handshake() error {
 
 	// Perform second stage of handshake phase
 	// The mission here is to get a KLAP encryption session
-	err = k.handshake2(localSeed, remoteSeed)
+	err = k.handshake2(ctx, localSeed, remoteSeed)
 	if err != nil {
 		return err
 	}
@@ -180,32 +183,12 @@ func (k *KlapTransport) handshake() error {
 	return nil
 }
 
-func (k *KlapTransport) ExecuteRequest(request *RequestSpec) (response json.RawMessage, err error) {
-	var responseBody []byte
-	var statusCode int
-	var responseErr error
-
-	for retries := 0; ; retries++ {
-		responseBody, statusCode, responseErr = k.executeHttpRequest(request)
-
-		if responseErr == nil && statusCode == 200 {
-			break
-		}
-
-		if (k.retryConfig == nil || retries >= k.retryConfig.RetryCount) || k.retryConfig.Retry403ErrorsOnly && statusCode != 403 {
-			return response, errors.New(fmt.Sprintf("request exited with failed status: %d, error: %+v", statusCode, responseErr))
-		}
-
-		time.Sleep(k.retryConfig.RetryDelay * time.Second)
-	}
-
-	// Decrypt the payload to process it
-	httpResponseBodyString := k.Session.decrypt(responseBody)
-	return json.RawMessage(httpResponseBodyString), nil
+func (k *KlapTransport) ExecuteRequest(ctx context.Context, request *RequestSpec) (response json.RawMessage, err error) {
+	return ExecuteHttpRequest(ctx, k, request, k.retryConfig)
 }
 
-func (k *KlapTransport) executeHttpRequest(request *RequestSpec) ([]byte, int, error) {
-	httpRequest, err := k.prepareRequest(request)
+func (k *KlapTransport) executeHttpRequest(ctx context.Context, request *RequestSpec) ([]byte, int, error) {
+	httpRequest, err := k.prepareRequest(ctx, request)
 	if err != nil {
 		return nil, -1, err
 	}
@@ -225,10 +208,11 @@ func (k *KlapTransport) executeHttpRequest(request *RequestSpec) ([]byte, int, e
 		return httpResponseBody, httpResponse.StatusCode, errors.New(fmt.Sprintf("request exited with failed status: %d", httpResponse.StatusCode))
 	}
 
-	return httpResponseBody, httpResponse.StatusCode, nil
+	decryptedResponseBody := k.Session.decrypt(httpResponseBody)
+	return decryptedResponseBody, httpResponse.StatusCode, nil
 }
 
-func (k *KlapTransport) prepareRequest(request *RequestSpec) (*http.Request, error) {
+func (k *KlapTransport) prepareRequest(ctx context.Context, request *RequestSpec) (*http.Request, error) {
 	jsonBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -243,7 +227,7 @@ func (k *KlapTransport) prepareRequest(request *RequestSpec) (*http.Request, err
 		return nil, err
 	}
 
-	httpRequest, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewBuffer(encryptedPayload))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewBuffer(encryptedPayload))
 	if err != nil {
 		return nil, err
 	}

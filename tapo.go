@@ -1,6 +1,7 @@
 package tapo
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -10,7 +11,7 @@ import (
 )
 
 type Transport interface {
-	ExecuteRequest(request *RequestSpec) (response json.RawMessage, err error)
+	ExecuteRequest(ctx context.Context, request *RequestSpec) (response json.RawMessage, err error)
 }
 
 var DefaultHandshakeDelay = 1 * time.Second
@@ -20,9 +21,7 @@ var DefaultRetryConfig = &RetryConfig{
 	RetryCount: 3,
 }
 
-var DefaultHttpClient = &http.Client{
-	Timeout: 10 * time.Second,
-}
+var DefaultHttpClient = &http.Client{}
 
 type RetryConfig struct {
 	RetryDelay         time.Duration
@@ -78,25 +77,23 @@ func NewDevice(transport Transport, options Options) *Device {
 	return d
 }
 
-func (d *Device) GenerateTerminalUUID() string {
+func (d *Device) generateTerminalUUID() string {
 	newUUID := uuid.New()
 	hash := md5.Sum(newUUID[:])
 	return base64.StdEncoding.EncodeToString(hash[:])
 }
 
-func (d *Device) ExecuteMethod(method string, params json.RawMessage, result any) error {
+func (d *Device) ExecuteMethod(ctx context.Context, method string, params json.RawMessage, result any) error {
 	request := RequestSpec{
 		Method:          method,
 		RequestTimeMils: time.Now().UnixNano() / 1000000,
 		Params:          params,
-		TerminalUUID:    d.GenerateTerminalUUID(),
+		TerminalUUID:    d.generateTerminalUUID(),
 	}
 
-	stringResponse, err := d.transport.ExecuteRequest(&request)
+	stringResponse, err := d.transport.ExecuteRequest(ctx, &request)
 	if err != nil {
 		return err
 	}
-
 	return json.Unmarshal(stringResponse, &result)
-
 }
