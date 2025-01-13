@@ -9,7 +9,7 @@ type Hub struct {
 }
 
 func NewHub(host, email, password string, options Options) (*Hub, error) {
-	tr, err := NewSslAesTransport(host, email, password, nil)
+	tr, err := NewSslAesTransport(host, email, password, options)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,8 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -26,6 +28,7 @@ type SslAesTransport struct {
 	seq         int
 	encryption  *AES
 	httpClient  *http.Client
+	retryConfig *RetryConfig
 }
 
 var defaultHttpTransport = &http.Transport{
@@ -37,8 +40,8 @@ var defaultHttpTransport = &http.Transport{
 	},
 }
 
-func NewSslAesTransport(host, user, password string, httpClient *http.Client) (*SslAesTransport, error) {
-	client := httpClient
+func NewSslAesTransport(host, user, password string, options Options) (*SslAesTransport, error) {
+	client := options.HttpClient
 	if client == nil {
 		client = &http.Client{Transport: defaultHttpTransport}
 	}
@@ -51,6 +54,9 @@ func NewSslAesTransport(host, user, password string, httpClient *http.Client) (*
 	if err != nil {
 		return nil, err
 	}
+
+	transport.retryConfig = options.RetryConfig
+
 	return transport, nil
 }
 
@@ -230,15 +236,37 @@ func (t *SslAesTransport) handshake2() (*Handshake2Response, error) {
 	return &responseBody, nil
 }
 
-func (t *SslAesTransport) ExecuteRequest(rr *RequestSpec) (response json.RawMessage, err error) {
+func (t *SslAesTransport) ExecuteRequest(request *RequestSpec) (json.RawMessage, error) {
+	var responseBody json.RawMessage
+	var statusCode int
+	var err error
+
+	for retries := 0; ; retries++ {
+		responseBody, statusCode, err = t.executeHttpRequest(request)
+
+		if err == nil && statusCode == 200 {
+			break
+		}
+
+		if (t.retryConfig == nil || retries >= t.retryConfig.RetryCount) || t.retryConfig.Retry403ErrorsOnly && statusCode != 403 {
+			return nil, errors.New(fmt.Sprintf("request exited with failed status: %d, error: %+v", statusCode, err))
+		}
+
+		time.Sleep(t.retryConfig.RetryDelay * time.Second)
+	}
+
+	return responseBody, nil
+}
+
+func (t *SslAesTransport) executeHttpRequest(rr *RequestSpec) (json.RawMessage, int, error) {
 	multiRequestBody, err := json.Marshal(rr)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 	encryptedParams, err := t.encryption.Encrypt(multiRequestBody)
 
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	apiRequest := SecurePassThroughRequest{
@@ -253,14 +281,14 @@ func (t *SslAesTransport) ExecuteRequest(rr *RequestSpec) (response json.RawMess
 	apiRequestBody, err := json.Marshal(apiRequest)
 	if err != nil {
 		log.Println("Error marshalling JSON:", err)
-		return nil, err
+		return nil, -1, err
 	}
 
 	// Create the HTTP request
 	req, err := http.NewRequest("POST", "https://"+t.host+"/stok="+t.stok+"/ds", bytes.NewBuffer(apiRequestBody))
 	if err != nil {
 		log.Println("Error creating request:", err)
-		return nil, err
+		return nil, -1, err
 	}
 
 	tag := t.GenerateTag(string(apiRequestBody), t.seq)
@@ -273,7 +301,7 @@ func (t *SslAesTransport) ExecuteRequest(rr *RequestSpec) (response json.RawMess
 	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		log.Println("Error making request:", err)
-		return nil, err
+		return nil, -1, err
 	}
 	defer resp.Body.Close()
 
@@ -281,21 +309,21 @@ func (t *SslAesTransport) ExecuteRequest(rr *RequestSpec) (response json.RawMess
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("Error reading response body:", err)
-		return nil, err
+		return nil, -1, err
 	}
 	responseBody := SecurePassThroughResponse{}
 	err = json.Unmarshal(body, &responseBody)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	decrypt, err := t.encryption.Decrypt(responseBody.Result.Response)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	t.seq++
-	return json.RawMessage(decrypt), nil
+	return json.RawMessage(decrypt), resp.StatusCode, nil
 }
 
 type Handshake1Request struct {

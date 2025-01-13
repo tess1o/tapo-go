@@ -24,19 +24,16 @@ log.Printf("Energy usage: %+v\n", energyUsage.Result)
 Hub (H200) and its devices:
 
 ```go
-hub, err := tapo.NewHub("192.168.1.15", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
+	hub, err := tapo.NewHub("192.168.1.15", "tapo_email@gmail.com", "my_tapo_password", tapo.Options{})
 if err != nil {
-    log.Fatalf("Error creating hub: %s", err)
+log.Fatalf("Error creating hub: %s", err)
 }
-devices, err := hub.GetChildDevices()
+t := tapo.NewTSeriesDevices(hub)
+seriesDevices, err := t.GetTSeriesDevices()
 if err != nil {
-    log.Fatalf("Error getting child devices: %s", err)
+log.Fatalf("Error getting TSeries devices: %s", err)
 }
-devicesJsonResponse, err := devices.MarshalJSON()
-if err != nil {
-    log.Fatalf("Error marshalling devices: %s", err)
-}
-log.Printf("Devices: %+v\n", string(devicesJsonResponse))
+log.Printf("T Series devices: %+v\n", seriesDevices)
 ```
 
 ## Todo
@@ -44,6 +41,7 @@ log.Printf("Devices: %+v\n", string(devicesJsonResponse))
 - Add more methods to P11X and H200 devices
 - Add structs to reflect the API responses, instead of json.RawMessage
 - Add more error handling for AES transport (used in H200)
+- Add ctx support
 
 ## Credits
 

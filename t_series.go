@@ -3,7 +3,6 @@ package tapo
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 )
 
@@ -30,7 +29,6 @@ func (t *TSeries) GetTSeriesDevices() ([]TSeriesResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf(string(childDeviceList))
 		var response []TSeriesResponse
 		err = json.Unmarshal(childDeviceList, &response)
 		if err != nil {
