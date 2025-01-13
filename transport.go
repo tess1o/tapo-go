@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 )
 
 type httpTransport interface {
@@ -43,6 +44,9 @@ func ExecuteHttpRequest(ctx context.Context, transport httpTransport, req *Reque
 			case <-ctx.Done():
 				return nil, errors.New("context canceled")
 			default:
+				if retryConfig != nil && retries < retryCount {
+					time.Sleep(retryConfig.RetryDelay)
+				}
 			}
 		}
 	}
